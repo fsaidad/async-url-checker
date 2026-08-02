@@ -5,7 +5,7 @@ import { Provider } from 'react-redux';
 import type { JobDetails as JobDetailsContract, JobStatus } from '@url-checker/contracts';
 
 import { jobApi, setActiveJobId } from '@entities/job';
-import { ACTIVE_JOB_POLLING_MS } from '@shared/config';
+import { ACTIVE_JOB_POLLING_MS, ACTIVE_JOB_RECOVERY_POLLING_MS } from '@shared/config';
 import { JobDetails } from '@widgets/job-details';
 
 import { App } from './App';
@@ -120,6 +120,9 @@ describe('jobs UI', () => {
       expect(screen.getByTestId('job-details')).toHaveAttribute('data-job-id', 'created-job'),
     );
     expect(submittedUrls).toEqual(['https://created.test']);
+    expect(
+      screen.getByText('Job created. Status: Completed. Progress: 1 of 1 URLs finished.'),
+    ).toHaveAttribute('role', 'status');
   });
 
   it('selects a recent job and loads its keyed details', async () => {
@@ -152,6 +155,50 @@ describe('jobs UI', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('job-details')).toHaveAttribute('data-job-id', 'selectable-job'),
+    );
+  });
+
+  it('announces active-job progress and terminal status through one persistent live region', async () => {
+    server.use(http.get(apiUrl('/jobs'), () => HttpResponse.json([])));
+    const store = createAppStore('announced-job');
+    store.dispatch(jobApi.internalActions.onFocusLost());
+    await store.dispatch(
+      jobApi.util.upsertQueryData(
+        'getJob',
+        'announced-job',
+        jobDetails('announced-job', 'in_progress'),
+      ),
+    );
+    render(
+      <Provider store={store}>
+        <App />
+      </Provider>,
+    );
+
+    const announcement = screen.getByRole('status');
+    expect(announcement).toHaveAttribute('aria-live', 'polite');
+    expect(announcement).toHaveAttribute('aria-atomic', 'true');
+    expect(announcement).toHaveTextContent(
+      'Job selected. Status: In progress. Progress: 0 of 1 URLs finished.',
+    );
+
+    const completedDetails = jobDetails('announced-job', 'completed');
+    act(() => {
+      store.dispatch(
+        jobApi.util.updateQueryData('getJob', 'announced-job', (details) => {
+          Object.assign(details, completedDetails);
+        }),
+      );
+    });
+    expect(jobApi.endpoints.getJob.select('announced-job')(store.getState()).data?.status).toBe(
+      'completed',
+    );
+
+    expect(screen.getByRole('status')).toBe(announcement);
+    await waitFor(() =>
+      expect(announcement).toHaveTextContent(
+        'Job selected. Status: Completed. Progress: 1 of 1 URLs finished.',
+      ),
     );
   });
 
@@ -238,6 +285,231 @@ describe('jobs UI', () => {
     expect(screen.getByTestId('job-details')).toHaveAttribute('data-job-id', 'new-cancel-job');
     expect(screen.getByRole('button', { name: 'Cancel job' })).toBeEnabled();
     expect(screen.queryByText('old cancellation failed')).not.toBeInTheDocument();
+  });
+
+  it('does not poll repeatedly when the initial job request returns 404', async () => {
+    let calls = 0;
+    server.use(
+      http.get(apiUrl('/jobs/missing-job'), () => {
+        calls += 1;
+        return HttpResponse.json({ message: 'missing job' }, { status: 404 });
+      }),
+    );
+    const store = createAppStore('missing-job');
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    });
+    render(
+      <Provider store={store}>
+        <JobDetails />
+      </Provider>,
+    );
+
+    await advancePollingBy(0);
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(jobApi.endpoints.getJob.select('missing-job')(store.getState()).status).toBe(
+          'rejected',
+        );
+      });
+    });
+    expect(calls).toBe(1);
+    expect(screen.getByText('missing job')).toBeInTheDocument();
+
+    await advancePollingBy(ACTIVE_JOB_POLLING_MS * 5);
+    act(() => {
+      store.dispatch(jobApi.internalActions.onFocusLost());
+      store.dispatch(jobApi.internalActions.onFocus());
+    });
+    await advancePollingBy(0);
+    expect(calls).toBe(1);
+  });
+
+  it('recovers transient errors slowly, then returns to the active polling cadence', async () => {
+    let calls = 0;
+    const recoveryResponse = deferred();
+    const terminalResponse = deferred();
+    server.use(
+      http.get(apiUrl('/jobs/transient-job'), async () => {
+        calls += 1;
+        if (calls === 1) {
+          return HttpResponse.json({ message: 'temporary failure' }, { status: 503 });
+        }
+        if (calls === 2) {
+          await recoveryResponse.promise;
+          return HttpResponse.json(jobDetails('transient-job', 'in_progress'));
+        }
+        await terminalResponse.promise;
+        return HttpResponse.json(jobDetails('transient-job', 'completed'));
+      }),
+    );
+    const store = createAppStore('transient-job');
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    });
+    render(
+      <Provider store={store}>
+        <JobDetails />
+      </Provider>,
+    );
+
+    await advancePollingBy(0);
+    await act(async () => {
+      await vi.waitFor(
+        () => {
+          expect(jobApi.endpoints.getJob.select('transient-job')(store.getState()).status).toBe(
+            'rejected',
+          );
+          expect(screen.getByText('Automatic recovery will retry shortly.')).toBeInTheDocument();
+        },
+        { interval: 1 },
+      );
+    });
+    await advancePollingBy(0);
+    expect(calls).toBe(1);
+
+    await advancePollingBy(ACTIVE_JOB_POLLING_MS * 2);
+    expect(calls).toBe(1);
+    await advancePollingBy(ACTIVE_JOB_RECOVERY_POLLING_MS - ACTIVE_JOB_POLLING_MS * 2);
+    await act(async () => {
+      await vi.waitFor(() => expect(calls).toBe(2), { interval: 1 });
+    });
+    expect(calls).toBe(2);
+
+    await act(async () => {
+      recoveryResponse.resolve();
+      await vi.waitFor(
+        () => {
+          expect(
+            jobApi.endpoints.getJob.select('transient-job')(store.getState()).data?.status,
+          ).toBe('in_progress');
+        },
+        { interval: 1 },
+      );
+    });
+    await advancePollingBy(0);
+    await act(async () => {
+      await vi.waitFor(() => expect(screen.getAllByText('In progress')).toHaveLength(2), {
+        interval: 1,
+      });
+    });
+
+    await advancePollingBy(ACTIVE_JOB_POLLING_MS);
+    await act(async () => {
+      await vi.waitFor(() => expect(calls).toBe(3), { interval: 1 });
+    });
+    expect(calls).toBe(3);
+
+    await act(async () => {
+      terminalResponse.resolve();
+      await vi.waitFor(
+        () => {
+          expect(
+            jobApi.endpoints.getJob.select('transient-job')(store.getState()).data?.status,
+          ).toBe('completed');
+        },
+        { interval: 1 },
+      );
+    });
+    await advancePollingBy(0);
+    await act(async () => {
+      await vi.waitFor(() => expect(screen.getByText('Completed')).toBeInTheDocument(), {
+        interval: 1,
+      });
+    });
+    const callsAtCompletion = calls;
+    await advancePollingBy(ACTIVE_JOB_RECOVERY_POLLING_MS * 2);
+    expect(calls).toBe(callsAtCompletion);
+  });
+
+  it('lets Retry bypass the transient recovery delay', async () => {
+    let calls = 0;
+    server.use(
+      http.get(apiUrl('/jobs/manual-retry-job'), () => {
+        calls += 1;
+        return calls === 1
+          ? HttpResponse.json({ message: 'temporary failure' }, { status: 503 })
+          : HttpResponse.json(jobDetails('manual-retry-job', 'completed'));
+      }),
+    );
+    const store = createAppStore('manual-retry-job');
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    });
+    render(
+      <Provider store={store}>
+        <JobDetails />
+      </Provider>,
+    );
+
+    await advancePollingBy(0);
+    await act(async () => {
+      await vi.waitFor(
+        () =>
+          expect(screen.getByText('Automatic recovery will retry shortly.')).toBeInTheDocument(),
+        { interval: 1 },
+      );
+    });
+    await advancePollingBy(ACTIVE_JOB_POLLING_MS);
+    expect(calls).toBe(1);
+
+    act(() => {
+      screen.getByRole('button', { name: 'Retry' }).click();
+    });
+    await act(async () => {
+      await vi.waitFor(
+        () => {
+          expect(
+            jobApi.endpoints.getJob.select('manual-retry-job')(store.getState()).data?.status,
+          ).toBe('completed');
+        },
+        { interval: 1 },
+      );
+    });
+    expect(calls).toBe(2);
+
+    await advancePollingBy(ACTIVE_JOB_RECOVERY_POLLING_MS * 2);
+    expect(calls).toBe(2);
+  });
+
+  it('pauses polling when a cached running job refresh returns a permanent error', async () => {
+    let calls = 0;
+    server.use(
+      http.get(apiUrl('/jobs/restarted-api-job'), () => {
+        calls += 1;
+        return HttpResponse.json({ message: 'job disappeared after restart' }, { status: 404 });
+      }),
+    );
+    const store = createAppStore('restarted-api-job');
+    await store.dispatch(
+      jobApi.util.upsertQueryData(
+        'getJob',
+        'restarted-api-job',
+        jobDetails('restarted-api-job', 'in_progress'),
+      ),
+    );
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    });
+    render(
+      <Provider store={store}>
+        <JobDetails />
+      </Provider>,
+    );
+
+    await advancePollingBy(0);
+    await advancePollingBy(ACTIVE_JOB_POLLING_MS);
+    await act(async () => {
+      await vi.waitFor(() => {
+        expect(
+          screen.getByText('Automatic updates paused. Retry to continue.'),
+        ).toBeInTheDocument();
+      });
+    });
+    const callsAtPause = calls;
+
+    await advancePollingBy(ACTIVE_JOB_POLLING_MS * 5);
+    expect(calls).toBe(callsAtPause);
   });
 
   it('polls the active job until it reaches a terminal state, then stops', async () => {

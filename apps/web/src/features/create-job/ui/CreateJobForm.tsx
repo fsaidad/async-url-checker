@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { MAX_URLS_PER_JOB } from '@url-checker/contracts';
 
-import { setActiveJobId, useCreateJobMutation } from '@entities/job';
+import { setCreatedJobActive, useCreateJobMutation } from '@entities/job';
 import { formatApiError } from '@shared/api';
 import { Button } from '@shared/ui/button';
 
@@ -33,7 +33,7 @@ export function CreateJobForm(): React.JSX.Element {
 
     try {
       const created = await createJob({ urls: parsed.urls }).unwrap();
-      dispatch(setActiveJobId(created.jobId));
+      dispatch(setCreatedJobActive(created.jobId));
     } catch {
       // RTK Query exposes the error below and keeps the submitted input for retry.
     }

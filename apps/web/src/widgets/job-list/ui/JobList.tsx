@@ -15,6 +15,7 @@ export function JobList(): React.JSX.Element {
     refetch,
   } = useGetJobsQuery(undefined, {
     pollingInterval: JOB_LIST_POLLING_MS,
+    skipPollingIfUnfocused: true,
     refetchOnFocus: true,
   });
 

@@ -10,8 +10,8 @@ import {
   useGetJobQuery,
 } from '@entities/job';
 import { CancelJobButton } from '@features/cancel-job';
-import { formatApiError } from '@shared/api';
-import { ACTIVE_JOB_POLLING_MS } from '@shared/config';
+import { formatApiError, isTransientApiError } from '@shared/api';
+import { ACTIVE_JOB_POLLING_MS, ACTIVE_JOB_RECOVERY_POLLING_MS } from '@shared/config';
 import { Button } from '@shared/ui/button';
 
 import styles from './JobDetails.module.css';
@@ -35,10 +35,22 @@ const resultIcons: Record<UrlCheckStatus, string> = {
 export function JobDetails(): React.JSX.Element {
   const activeJobId = useSelector(selectActiveJobId);
   const cachedQuery = useSelector(jobApi.endpoints.getJob.select(activeJobId ?? ''));
+  const cachedJobIsPollable = cachedQuery.data === undefined || shouldPollJob(cachedQuery.data);
+  const recovering = isTransientApiError(cachedQuery.error) && cachedJobIsPollable;
+  const pollingInterval =
+    cachedQuery.error === undefined
+      ? shouldPollJob(cachedQuery.data)
+        ? ACTIVE_JOB_POLLING_MS
+        : 0
+      : recovering
+        ? ACTIVE_JOB_RECOVERY_POLLING_MS
+        : 0;
   const query = useGetJobQuery(activeJobId ?? skipToken, {
-    pollingInterval: shouldPollJob(cachedQuery.data) ? ACTIVE_JOB_POLLING_MS : 0,
+    // Network and 5xx failures retry at a reduced cadence. Permanent responses such as
+    // 404 stop automatic work until the user explicitly retries.
+    pollingInterval,
     skipPollingIfUnfocused: true,
-    refetchOnFocus: true,
+    refetchOnFocus: cachedQuery.error === undefined || recovering,
   });
   const details = query.currentData;
 
@@ -57,6 +69,9 @@ export function JobDetails(): React.JSX.Element {
         <Button type="button" variant="secondary" onClick={() => void query.refetch()}>
           Retry
         </Button>
+        {isTransientApiError(query.error) ? (
+          <p className={styles.muted}>Automatic recovery will retry shortly.</p>
+        ) : null}
       </div>
     );
   }
@@ -65,7 +80,9 @@ export function JobDetails(): React.JSX.Element {
   const completedCount = details.results.filter((result) =>
     ['success', 'error', 'cancelled'].includes(result.status),
   ).length;
-  const polling = shouldPollJob(details);
+  const pollable = shouldPollJob(details);
+  const recoveringFromError = query.error !== undefined && isTransientApiError(query.error);
+  const pollingPaused = query.error !== undefined && !recoveringFromError && pollable;
 
   return (
     <div data-testid="job-details" data-job-id={details.id}>
@@ -143,12 +160,16 @@ export function JobDetails(): React.JSX.Element {
           </tbody>
         </table>
       </div>
-      <span className={styles.muted} aria-live="polite">
-        {polling
-          ? details.status === 'cancelled'
-            ? 'Waiting for in-flight checks to finish.'
-            : 'Updates automatically while this job is running.'
-          : 'This job is terminal.'}
+      <span className={styles.muted}>
+        {recoveringFromError && pollable
+          ? 'Retrying automatically at a reduced rate.'
+          : pollingPaused
+            ? 'Automatic updates paused. Retry to continue.'
+            : pollable
+              ? details.status === 'cancelled'
+                ? 'Waiting for in-flight checks to finish.'
+                : 'Updates automatically while this job is running.'
+              : 'This job is terminal.'}
       </span>
     </div>
   );

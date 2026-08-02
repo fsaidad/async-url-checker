@@ -20,6 +20,27 @@ describe('parseUrls', () => {
     ]);
   });
 
+  it('uses the same URL boundaries as the API validator', () => {
+    const result = parseUrls(
+      [
+        'http://localhost',
+        'http://[::1]',
+        'https://example.com/a b',
+        String.raw`http:\\example.com`,
+        'https://exa_mple.com',
+        'http://example.com:0',
+      ].join('\n'),
+    );
+
+    expect(result.urls).toEqual(['http://localhost', 'http://[::1]']);
+    expect(result.errors).toEqual([
+      'Line 3: “https://example.com/a b” is not a valid URL.',
+      String.raw`Line 4: “http:\\example.com” is not a valid URL.`,
+      'Line 5: “https://exa_mple.com” is not a valid URL.',
+      'Line 6: “http://example.com:0” is not a valid URL.',
+    ]);
+  });
+
   it('preserves physical line numbers when blank lines are skipped', () => {
     expect(parseUrls('\n  \nnot a url').errors).toEqual([
       'Line 3: “not a url” is not a valid URL.',

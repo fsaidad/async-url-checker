@@ -1,4 +1,5 @@
 import { MAX_URLS_PER_JOB } from '@url-checker/contracts';
+import isURL from 'validator/lib/isURL';
 
 export interface ParsedUrls {
   urls: string[];
@@ -24,16 +25,33 @@ export function parseUrls(input: string): ParsedUrls {
     }
     seen.add(line);
 
+    let parsed: URL;
     try {
-      const parsed = new URL(line);
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        errors.push(`Line ${lineNumber}: only http:// and https:// URLs are supported.`);
-      } else {
-        urls.push(line);
-      }
+      parsed = new URL(line);
     } catch {
       errors.push(`Line ${lineNumber}: “${line}” is not a valid URL.`);
+      continue;
     }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      errors.push(`Line ${lineNumber}: only http:// and https:// URLs are supported.`);
+      continue;
+    }
+
+    // Match the class-validator options used by CreateJobDto so a value that
+    // passes client validation is not rejected by the API immediately after.
+    if (
+      !isURL(line, {
+        protocols: ['http', 'https'],
+        require_protocol: true,
+        require_tld: false,
+      })
+    ) {
+      errors.push(`Line ${lineNumber}: “${line}” is not a valid URL.`);
+      continue;
+    }
+
+    urls.push(line);
   }
 
   if (lines.every(({ line }) => line.length === 0)) errors.push('Enter at least one URL.');

@@ -4,7 +4,9 @@ import { jobsUiReducer, type JobsUiState } from '@entities/job';
 import { baseApi } from '@shared/api';
 
 export function createAppStore(activeJobId: string | null = null) {
-  const preloadedState: { jobsUi: JobsUiState } = { jobsUi: { activeJobId } };
+  const preloadedState: { jobsUi: JobsUiState } = {
+    jobsUi: { activeJobId, activeJobWasCreated: false },
+  };
   const store = configureStore({
     reducer: {
       [baseApi.reducerPath]: baseApi.reducer,

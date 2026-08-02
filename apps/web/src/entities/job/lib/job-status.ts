@@ -11,7 +11,8 @@ export function isTerminalJobStatus(status: JobStatus | undefined): boolean {
 }
 
 export function shouldPollJob(details: JobDetails | undefined): boolean {
-  if (details === undefined || !isTerminalJobStatus(details.status)) return true;
+  if (details === undefined) return false;
+  if (!isTerminalJobStatus(details.status)) return true;
 
   // Cancellation stops new work immediately, but checks which were already in flight
   // are allowed to settle. Keep refreshing until their final result is visible.
