@@ -12,7 +12,7 @@ export const URL_CHECK_STATUSES = [
 
 export type UrlCheckStatus = (typeof URL_CHECK_STATUSES)[number];
 
-/** Public API ceiling; a deployment may configure a smaller per-job limit. */
+/** Fixed per-job limit shared by API validation, OpenAPI, and the web client. */
 export const MAX_URLS_PER_JOB = 100;
 
 export interface JobStatistics {

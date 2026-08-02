@@ -8,7 +8,6 @@ function createProbe(): FetchUrlProbe {
       port: 3000,
       webOrigin: 'http://localhost:5173',
       probeTimeoutMs: 123,
-      maxUrlsPerJob: 100,
       maxConcurrencyPerJob: 5,
       maxResultDelayMs: 10_000,
     }),
@@ -19,6 +18,10 @@ function stubFetch(): ReturnType<typeof vi.fn<typeof fetch>> {
   const fetchMock = vi.fn<typeof fetch>();
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
+}
+
+function errorWithCode(code: string, message: string): Error & { code: string } {
+  return Object.assign(new Error(message), { code });
 }
 
 afterEach(() => {
@@ -59,26 +62,20 @@ describe('FetchUrlProbe', () => {
     expect(error).toMatchObject({ name: 'ProbeError', message: 'Request timed out' });
   });
 
-  it('normalizes network failures without losing their useful message', async () => {
-    const fetchMock = stubFetch();
-    fetchMock.mockRejectedValue(new Error('getaddrinfo ENOTFOUND example.test'));
-
-    const error = await createProbe()
-      .head('https://example.test')
-      .catch((caught: unknown) => caught);
-
-    expect(error).toBeInstanceOf(ProbeError);
-    expect(error).toMatchObject({
-      name: 'ProbeError',
-      message: 'getaddrinfo ENOTFOUND example.test',
-    });
-  });
-
-  it('uses the nested cause from a typical Node fetch failure', async () => {
+  it.each([
+    ['ENOTFOUND', 'DNS lookup failed'],
+    ['EAI_AGAIN', 'DNS lookup failed'],
+    ['ECONNREFUSED', 'Connection refused'],
+    ['ECONNRESET', 'Connection reset'],
+    ['ETIMEDOUT', 'Request timed out'],
+    ['UND_ERR_CONNECT_TIMEOUT', 'Request timed out'],
+    ['CERT_HAS_EXPIRED', 'TLS connection failed'],
+    ['ERR_TLS_CERT_ALTNAME_INVALID', 'TLS connection failed'],
+  ])('normalizes nested cause code %s as a stable message', async (code, message) => {
     const fetchMock = stubFetch();
     fetchMock.mockRejectedValue(
-      new TypeError('fetch failed', {
-        cause: new Error('connect ECONNREFUSED 127.0.0.1:65534'),
+      new TypeError('fetch failed with sensitive context', {
+        cause: errorWithCode(code, 'sensitive host and port details'),
       }),
     );
 
@@ -87,9 +84,21 @@ describe('FetchUrlProbe', () => {
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(ProbeError);
-    expect(error).toMatchObject({
+    expect(error).toMatchObject({ name: 'ProbeError', message });
+    expect(error).not.toHaveProperty('message', expect.stringContaining('sensitive'));
+  });
+
+  it('uses a safe fallback for unknown errors without exposing raw messages', async () => {
+    const fetchMock = stubFetch();
+    fetchMock.mockRejectedValue(
+      new TypeError('fetch failed for internal-service.test', {
+        cause: errorWithCode('UNKNOWN_NETWORK_CODE', 'connect 10.0.0.7:8443'),
+      }),
+    );
+
+    await expect(createProbe().head('https://example.test')).rejects.toMatchObject({
       name: 'ProbeError',
-      message: 'connect ECONNREFUSED 127.0.0.1:65534',
+      message: 'Network request failed',
     });
   });
 

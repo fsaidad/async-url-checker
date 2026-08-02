@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
+import { MAX_URLS_PER_JOB } from '@url-checker/contracts';
 
 import { HealthController } from './health/health.controller.js';
 import { JobsService } from './jobs/application/jobs.service.js';
@@ -101,6 +102,18 @@ describe('OpenAPI document', () => {
       content: {
         'application/json': {
           schema: { $ref: '#/components/schemas/ApiErrorResponseDto' },
+        },
+      },
+    });
+  });
+
+  it('publishes the fixed shared per-job URL limit', () => {
+    expect(document.components?.schemas?.CreateJobDto).toMatchObject({
+      properties: {
+        urls: {
+          type: 'array',
+          minItems: 1,
+          maxItems: MAX_URLS_PER_JOB,
         },
       },
     });

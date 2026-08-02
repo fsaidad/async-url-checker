@@ -1,25 +1,18 @@
 import { Global, Inject, Injectable, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MAX_URLS_PER_JOB } from '@url-checker/contracts';
 
 export interface AppConfigValues {
   port: number;
   webOrigin: string;
   probeTimeoutMs: number;
-  maxUrlsPerJob: number;
   maxConcurrencyPerJob: number;
   maxResultDelayMs: number;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
-
-function positiveInteger(value: string | undefined, fallback: number, name: string): number {
-  const parsed = value === undefined ? fallback : Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`);
-  }
-  return parsed;
-}
+const MAX_PORT = 65_535;
+// Node timers overflow above a signed 32-bit millisecond delay.
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 function boundedInteger(
   value: string | undefined,
@@ -37,19 +30,14 @@ function boundedInteger(
 
 export function createAppConfig(config: ConfigService): AppConfigValues {
   return {
-    port: positiveInteger(config.get<string>('PORT'), 3000, 'PORT'),
+    port: boundedInteger(config.get<string>('PORT'), 3000, 'PORT', 1, MAX_PORT),
     webOrigin: config.get<string>('WEB_ORIGIN') ?? 'http://localhost:5173',
-    probeTimeoutMs: positiveInteger(
+    probeTimeoutMs: boundedInteger(
       config.get<string>('PROBE_TIMEOUT_MS'),
       5_000,
       'PROBE_TIMEOUT_MS',
-    ),
-    maxUrlsPerJob: boundedInteger(
-      config.get<string>('MAX_URLS_PER_JOB'),
-      MAX_URLS_PER_JOB,
-      'MAX_URLS_PER_JOB',
       1,
-      MAX_URLS_PER_JOB,
+      MAX_TIMER_DELAY_MS,
     ),
     maxConcurrencyPerJob: boundedInteger(
       config.get<string>('MAX_CONCURRENCY_PER_JOB'),
@@ -82,10 +70,6 @@ export class AppConfig {
 
   get probeTimeoutMs(): number {
     return this.values.probeTimeoutMs;
-  }
-
-  get maxUrlsPerJob(): number {
-    return this.values.maxUrlsPerJob;
   }
 
   get maxConcurrencyPerJob(): number {

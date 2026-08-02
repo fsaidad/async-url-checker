@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { MAX_URLS_PER_JOB } from '@url-checker/contracts';
 import request from 'supertest';
 
 import { AppModule } from '../src/app.module.js';
@@ -79,7 +80,6 @@ describe('Jobs API (e2e)', () => {
           port: 3000,
           webOrigin: 'http://localhost:5173',
           probeTimeoutMs: 100,
-          maxUrlsPerJob: 100,
           maxConcurrencyPerJob: 5,
           maxResultDelayMs: 0,
         }),
@@ -154,7 +154,19 @@ describe('Jobs API (e2e)', () => {
     [{ urls: [] }],
     [{ urls: ['ftp://example.test'] }],
     [{ urls: ['not a URL'] }],
+    [{ urls: ['https://example.com/a b'] }],
+    [{ urls: [String.raw`http:\\example.com`] }],
+    [{ urls: ['https://exa_mple.com'] }],
+    [{ urls: ['http://example.com:0'] }],
     [{ urls: ['https://example.test'], extra: true }],
+    [
+      {
+        urls: Array.from(
+          { length: MAX_URLS_PER_JOB + 1 },
+          (_, index) => `https://example-${index}.test`,
+        ),
+      },
+    ],
   ])('rejects invalid input %#', async (body) => {
     await request(app.getHttpServer()).post('/api/jobs').send(body).expect(400);
   });

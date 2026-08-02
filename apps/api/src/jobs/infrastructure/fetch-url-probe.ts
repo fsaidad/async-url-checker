@@ -3,16 +3,61 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AppConfig } from '../../config/app-config.js';
 import { ProbeError, type ProbeResponse, type UrlProbe } from '../ports/url-probe.port.js';
 
+function errorCode(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || !('code' in value)) return null;
+  return typeof value.code === 'string' ? value.code.toUpperCase() : null;
+}
+
+function isTimeoutError(value: unknown): boolean {
+  return value instanceof Error && (value.name === 'AbortError' || value.name === 'TimeoutError');
+}
+
+function messageForErrorCode(code: string | null): string | null {
+  switch (code) {
+    case 'ENOTFOUND':
+    case 'EAI_AGAIN':
+    case 'EAI_FAIL':
+    case 'ENODATA':
+      return 'DNS lookup failed';
+    case 'ECONNREFUSED':
+      return 'Connection refused';
+    case 'ECONNRESET':
+      return 'Connection reset';
+    case 'ETIMEDOUT':
+    case 'ESOCKETTIMEDOUT':
+    case 'UND_ERR_CONNECT_TIMEOUT':
+    case 'UND_ERR_HEADERS_TIMEOUT':
+    case 'UND_ERR_BODY_TIMEOUT':
+      return 'Request timed out';
+    default:
+      break;
+  }
+
+  if (
+    code?.startsWith('ERR_TLS_') === true ||
+    code?.startsWith('ERR_SSL_') === true ||
+    code === 'CERT_HAS_EXPIRED' ||
+    code === 'CERT_NOT_YET_VALID' ||
+    code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
+    code === 'SELF_SIGNED_CERT_IN_CHAIN' ||
+    code === 'UNABLE_TO_GET_ISSUER_CERT' ||
+    code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' ||
+    code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+  ) {
+    return 'TLS connection failed';
+  }
+
+  return null;
+}
+
 function normalizeFetchError(error: unknown): ProbeError {
   if (error instanceof ProbeError) return error;
-  if (error instanceof Error) {
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      return new ProbeError('Request timed out');
-    }
-    const causeMessage = error.cause instanceof Error ? error.cause.message.trim() : '';
-    return new ProbeError(causeMessage || error.message || 'Network request failed');
+  const cause = error instanceof Error ? error.cause : null;
+  if (isTimeoutError(error) || isTimeoutError(cause)) {
+    return new ProbeError('Request timed out');
   }
-  return new ProbeError('Network request failed');
+  const normalizedMessage = messageForErrorCode(errorCode(cause) ?? errorCode(error));
+  return new ProbeError(normalizedMessage ?? 'Network request failed');
 }
 
 @Injectable()

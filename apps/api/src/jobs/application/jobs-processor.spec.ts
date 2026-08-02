@@ -11,7 +11,6 @@ function appConfig(overrides: Partial<AppConfigValues> = {}): AppConfig {
     port: 3000,
     webOrigin: 'http://localhost:5173',
     probeTimeoutMs: 100,
-    maxUrlsPerJob: 100,
     maxConcurrencyPerJob: 5,
     maxResultDelayMs: 10_000,
     ...overrides,

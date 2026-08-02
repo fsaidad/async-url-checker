@@ -2,22 +2,37 @@ import { ConfigService } from '@nestjs/config';
 
 import { createAppConfig } from './app-config.js';
 
-function configWithMaxUrls(value?: string): ConfigService {
-  const values: Record<string, string> = {};
-  if (value !== undefined) values['MAX_URLS_PER_JOB'] = value;
+function configWith(values: Record<string, string> = {}): ConfigService {
   return new ConfigService(values);
 }
 
 describe('createAppConfig', () => {
-  it('uses 100 as the default and accepts the configured boundaries', () => {
-    expect(createAppConfig(configWithMaxUrls()).maxUrlsPerJob).toBe(100);
-    expect(createAppConfig(configWithMaxUrls('1')).maxUrlsPerJob).toBe(1);
-    expect(createAppConfig(configWithMaxUrls('100')).maxUrlsPerJob).toBe(100);
+  it('uses safe defaults', () => {
+    expect(createAppConfig(configWith())).toMatchObject({
+      port: 3000,
+      probeTimeoutMs: 5_000,
+    });
   });
 
-  it.each(['0', '101', '-1', '1.5'])('rejects MAX_URLS_PER_JOB=%s', (value) => {
-    expect(() => createAppConfig(configWithMaxUrls(value))).toThrow(
-      'MAX_URLS_PER_JOB must be an integer between 1 and 100',
+  it.each(['1', '65535'])('accepts PORT=%s', (value) => {
+    expect(createAppConfig(configWith({ PORT: value })).port).toBe(Number(value));
+  });
+
+  it.each(['0', '65536', '-1', '1.5'])('rejects PORT=%s', (value) => {
+    expect(() => createAppConfig(configWith({ PORT: value }))).toThrow(
+      'PORT must be an integer between 1 and 65535',
+    );
+  });
+
+  it.each(['1', '2147483647'])('accepts PROBE_TIMEOUT_MS=%s', (value) => {
+    expect(createAppConfig(configWith({ PROBE_TIMEOUT_MS: value })).probeTimeoutMs).toBe(
+      Number(value),
+    );
+  });
+
+  it.each(['0', '2147483648', '-1', '1.5'])('rejects PROBE_TIMEOUT_MS=%s', (value) => {
+    expect(() => createAppConfig(configWith({ PROBE_TIMEOUT_MS: value }))).toThrow(
+      'PROBE_TIMEOUT_MS must be an integer between 1 and 2147483647',
     );
   });
 });
