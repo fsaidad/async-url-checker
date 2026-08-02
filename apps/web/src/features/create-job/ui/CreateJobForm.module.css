@@ -1,0 +1,56 @@
+.form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.label {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.hint {
+  color: #64748b;
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-top: 0.2rem;
+}
+
+.textarea {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.65rem;
+  color: #0f172a;
+  font:
+    0.9rem/1.55 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  min-height: 11rem;
+  padding: 0.75rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.textarea:focus {
+  border-color: #2563eb;
+  outline: 3px solid #dbeafe;
+}
+
+.textarea[aria-invalid='true'] {
+  border-color: #dc2626;
+}
+
+.errors {
+  color: #b91c1c;
+  font-size: 0.84rem;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.notice {
+  color: #166534;
+  font-size: 0.84rem;
+  margin: 0;
+}

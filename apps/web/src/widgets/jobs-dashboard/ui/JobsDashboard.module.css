@@ -1,0 +1,46 @@
+.dashboard {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(17rem, 0.82fr) minmax(0, 1.7fr);
+  grid-template-areas:
+    'create details'
+    'list details';
+  align-items: start;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #dbe3ee;
+  border-radius: 1rem;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.panel h2 {
+  font-size: 1rem;
+  margin: 0 0 0.85rem;
+}
+
+.create {
+  grid-area: create;
+}
+
+.list {
+  grid-area: list;
+}
+
+.details {
+  grid-area: details;
+  min-width: 0;
+}
+
+@media (max-width: 780px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'create'
+      'list'
+      'details';
+  }
+}

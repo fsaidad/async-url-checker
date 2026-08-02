@@ -1,0 +1,67 @@
+.list {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  max-height: 28rem;
+  overflow: auto;
+  padding: 0.1rem;
+}
+
+.itemButton {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.7rem;
+  text-align: left;
+  width: 100%;
+}
+
+.itemButton:hover {
+  border-color: #94a3b8;
+}
+
+.itemButton[aria-pressed='true'] {
+  background: #eff6ff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px #dbeafe;
+}
+
+.itemButton:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.topline {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.date,
+.stats,
+.empty,
+.error {
+  color: #64748b;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.id {
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error {
+  color: #b91c1c;
+  margin-bottom: 0.75rem;
+}

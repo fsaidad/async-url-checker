@@ -1,0 +1,131 @@
+.empty,
+.muted {
+  color: #64748b;
+  margin: 0;
+}
+
+.error {
+  color: #b91c1c;
+}
+
+.header {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.headingMeta {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.jobId {
+  color: #64748b;
+  font:
+    0.76rem/1.4 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+}
+
+.progressLabel {
+  align-items: center;
+  display: flex;
+  font-size: 0.86rem;
+  font-weight: 700;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.progress {
+  accent-color: #2563eb;
+  display: block;
+  height: 0.65rem;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+
+.tableWrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  min-width: 44rem;
+  width: 100%;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.url {
+  display: block;
+  max-width: 28rem;
+  overflow-wrap: anywhere;
+}
+
+.resultStatus {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.resultStatus::before {
+  content: attr(data-icon);
+  display: inline-block;
+  margin-right: 0.35rem;
+  width: 1em;
+}
+
+.success {
+  color: #047857;
+}
+
+.errorStatus {
+  color: #b91c1c;
+}
+
+.cancelled {
+  color: #9a3412;
+}
+
+.pending,
+.in_progress {
+  color: #1d4ed8;
+}
+
+.errorText {
+  color: #b91c1c;
+  max-width: 18rem;
+  overflow-wrap: anywhere;
+}
+
+.refreshing {
+  color: #64748b;
+  font-size: 0.76rem;
+  margin-left: 0.5rem;
+}

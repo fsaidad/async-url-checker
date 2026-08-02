@@ -1,0 +1,42 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      PORT: 3000
+      WEB_ORIGIN: http://localhost:8080
+      PROBE_TIMEOUT_MS: 5000
+      MAX_URLS_PER_JOB: 100
+      MAX_CONCURRENCY_PER_JOB: 5
+      MAX_RESULT_DELAY_MS: 10000
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:8080:80'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/healthz']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
