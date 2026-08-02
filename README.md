@@ -23,9 +23,12 @@ The API reads the root `.env` file when started through the workspace scripts:
 | `PORT`                    | `3000`                  | API listen port                              |
 | `WEB_ORIGIN`              | `http://localhost:5173` | Allowed development browser origin           |
 | `PROBE_TIMEOUT_MS`        | `5000`                  | Timeout for one HEAD request                 |
-| `MAX_URLS_PER_JOB`        | `100`                   | Deployment limit, from 1 through 100         |
 | `MAX_CONCURRENCY_PER_JOB` | `5`                     | Worker count per job, from 1 through 5       |
 | `MAX_RESULT_DELAY_MS`     | `10000`                 | Artificial pre-commit delay, from 0 to 10000 |
+
+The per-job limit is fixed at 100 URLs in the shared API contract used by validation, Swagger, and the
+frontend. `PORT` accepts values from 1 through 65535; `PROBE_TIMEOUT_MS` is capped at the largest delay
+that Node timers can represent without overflow (2147483647 ms).
 
 ## Architecture
 
@@ -78,7 +81,12 @@ items finish normally, but no worker receives another item and the parent job ca
 
 - final HTTP `200–399`: `success`;
 - final HTTP `400–599`: `error` with the received status code;
-- timeout, DNS, TLS, and transport failures: `error` with a normalized message and no status code.
+- timeout, DNS, TLS, and transport failures: `error` with a stable, non-sensitive message and no status
+  code.
+
+Transport failures are exposed only as `Request timed out`, `DNS lookup failed`, `Connection refused`,
+`Connection reset`, `TLS connection failed`, or the safe fallback `Network request failed`. Raw `fetch`
+and socket error messages are not returned by the API.
 
 `fetch` follows redirects. There is intentionally no GET fallback for servers that reject HEAD.
 
@@ -88,6 +96,10 @@ RTK Query stores details under the query key `getJob(jobId)`. Only the active id
 polled. Switching jobs unsubscribes the previous key; a late response remains in the old cache entry and
 cannot replace the current UI. Polling stops immediately at `completed` or `failed`. A cancelled job is
 polled only until checks that were already in flight have recorded their final URL results.
+
+Temporary network and `5xx` failures keep the active job visible and retry at a reduced five-second
+cadence; a successful response restores the normal one-second interval. Permanent `4xx` responses such
+as a missing in-memory job pause automatic updates and leave an explicit Retry action.
 
 The global Redux store contains the job list and details with loading/error metadata in RTK Query cache,
 plus `activeJobId` in a small UI slice.
@@ -151,7 +163,7 @@ Tests never use the public internet or the production 0–10 second delay. Backe
 limit, parallel jobs, cancellation/in-flight behavior, processor failures, the production HEAD adapter,
 error semantics, statistics, transitions, validation, 404s, health, and all job endpoints. Frontend
 tests cover parsing and limits, creation/activation, cancellation settlement, cached-data refresh errors,
-polling cleanup, and the late-response race.
+transient polling recovery, permanent-error cleanup, and the late-response race.
 
 GitHub Actions runs `npm ci` followed by `npm run check`; a separate job validates Compose, builds both
 production images, starts the stack, and smoke-tests the nginx-to-API health route.
@@ -170,14 +182,18 @@ For a fast backend-only smoke check, set `MAX_RESULT_DELAY_MS=0` in `.env` befor
 
 ## Honest limitations and trade-offs
 
+- Docker Compose intentionally binds the web service to `127.0.0.1`. Do not expose this build to a
+  public network: it does not include the SSRF and multi-user abuse controls described below.
 - All state disappears on API restart and does not work across multiple API replicas.
+- Completed jobs are retained in memory until that restart; there is no TTL or eviction policy.
 - Cancellation does not abort an already issued HEAD request; its individual result is retained.
 - Arbitrary URL checking can reach private network addresses. A public production service would need
   SSRF controls, DNS/IP revalidation, authentication, quotas, and abuse protection.
 - A site that supports GET but rejects HEAD is reported as an error, matching the assignment literally.
 - There is no queue persistence, retry policy, historical pagination, or distributed concurrency limit.
 - The limit is per job, not global: `N` simultaneous jobs may issue up to `5 × N` HEAD requests.
-- The UI lists the 20 newest jobs from the in-memory collection; this is enough for the assignment scale.
+- The API returns the full in-memory history and the UI renders its 20 newest jobs; server-side pagination
+  is intentionally outside the assignment scale.
 
 These are conscious three-day-assignment boundaries, not hidden production claims.
 

@@ -14,8 +14,8 @@ must remain correct when the UI switches quickly between jobs.
 Every URL is probed with `HEAD`. Responses in the `200–399` range are `success`. Responses in the
 `400–599` range are `error`, with the HTTP status retained. A response such as 404 is therefore not a
 network exception, but it is a broken-link result for the user-facing success/error statistics.
-Timeouts, DNS failures, invalid TLS, and other transport failures are `error` with a normalized message
-and no HTTP status.
+Timeouts, DNS failures, invalid TLS, and other transport failures are `error` with a stable,
+non-sensitive normalized message and no HTTP status.
 
 ### Per-job worker pool
 
@@ -40,6 +40,11 @@ The frontend polls details only for the current `activeJobId`. It stops immediat
 results from already claimed probes become visible. Changing the id changes the RTK Query cache key and
 unsubscribes the previous hook. A late response is stored only under its original job id and cannot
 overwrite the active job's details.
+
+A temporary network or `5xx` error switches the active query to a reduced five-second recovery cadence.
+After a successful non-terminal response it resumes normal one-second polling. A permanent `4xx`
+response, notably a job missing after an in-memory API restart, stops automatic requests and exposes a
+manual Retry action.
 
 ## Consequences
 
