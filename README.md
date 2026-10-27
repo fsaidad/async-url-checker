@@ -3,6 +3,20 @@
 A small full-stack service that accepts a batch of URLs, probes them asynchronously with HTTP `HEAD`,
 and shows live per-URL progress. Jobs are stored in memory by design.
 
+## See it working
+
+![Actual local run: HTTP 200, HTTP 404 and a timeout](https://raw.githubusercontent.com/fsaidad/fsaidad/main/async-url-checker-preview.png)
+
+Actual application screenshot captured on 27 October 2026 from implementation commit `1e1b9c3`.
+Durations include the assignment's artificial processing delay, so they are not a performance benchmark.
+
+[Short engineering case](https://github.com/fsaidad/fsaidad/blob/main/ASYNC-URL-CHECKER-CASE-EN.md) ·
+[Reproducible React regression example: switching jobs during cancellation](https://github.com/fsaidad/fsaidad/blob/main/REACT-ASYNC-REGRESSION-EN.md)
+
+This is a technical assignment, separate from commercial client work. On 27 October 2026, the existing
+25 backend tests, 13 frontend tests and both production builds passed again. The linked regression case
+also records a controlled failing mutation followed by the passing original implementation.
+
 ## Quick start
 
 Requirements: Node.js 24 (LTS) and npm 11.
